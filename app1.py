@@ -2,31 +2,37 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import pygame
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, url_for
+import os
 import time
 
 # Initialize Flask
 app = Flask(__name__)
 
-# Initialize Pygame
+# Initialize Pygame with headless mode
+os.environ['SDL_VIDEODRIVER'] = 'dummy'
 pygame.init()
+
+# Configure window dimensions
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 skeleton_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
 
-# Load Skeleton Image (Ensure you have a realistic skeleton image, transparent background)
-skeleton_image = pygame.image.load(r'E:\job related docs\py development\—Pngtree—human body skeleton model_4453747.png')  # Correct path
-skeleton_image = pygame.transform.scale(skeleton_image, (WINDOW_WIDTH, WINDOW_HEIGHT))
+# Load Skeleton Image from static folder
+skeleton_image_path = os.path.join('static', 'skeleton.png')
+try:
+    skeleton_image = pygame.image.load(skeleton_image_path)
+    skeleton_image = pygame.transform.scale(skeleton_image, (WINDOW_WIDTH, WINDOW_HEIGHT))
+except pygame.error as e:
+    print(f"Error loading skeleton image: {e}")
+    skeleton_image = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
 
 # Initialize the Pose Detection Model
-# Ensure eager execution
-tf.compat.v1.enable_eager_execution()
-
 class PoseDetector:
     def __init__(self):
         print("Loading MoveNet model...")
         try:
-            model_path = 'C:/Users/SURABHI/Downloads/movenet-tensorflow2-singlepose-lightning-v4'  # Correct path
+            model_path = os.path.join('models', 'movenet-model')
             self.model = tf.saved_model.load(model_path)
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -38,30 +44,31 @@ class PoseDetector:
         if self.model is None:
             return {}
 
-        img = tf.image.resize_with_pad(tf.expand_dims(frame, axis=0), self.input_size, self.input_size)
-        img = tf.cast(img, dtype=tf.int32)
+        try:
+            img = tf.image.resize_with_pad(tf.expand_dims(frame, axis=0), self.input_size, self.input_size)
+            img = tf.cast(img, dtype=tf.int32)
 
-        outputs = self.model.signatures["serving_default"](img)
-        
-        # Ensure eager execution and evaluate tensor
-        keypoints = outputs['output_0'].numpy()[0][0]
+            outputs = self.model.signatures["serving_default"](img)
+            keypoints = outputs['output_0'].numpy()[0][0]
 
-        height, width = frame.shape[:2]
-        keypoints_dict = {}
+            height, width = frame.shape[:2]
+            keypoints_dict = {}
 
-        min_confidence = 0.2
-        for idx, kp in enumerate(keypoints):
-            y, x, score = kp
-            if score > min_confidence:
-                x_px = min(max(0, int(x * width)), width - 1)
-                y_px = min(max(0, int(y * height)), height - 1)
-                keypoints_dict[idx] = (x_px, y_px)
+            min_confidence = 0.2
+            for idx, kp in enumerate(keypoints):
+                y, x, score = kp
+                if score > min_confidence:
+                    x_px = min(max(0, int(x * width)), width - 1)
+                    y_px = min(max(0, int(y * height)), height - 1)
+                    keypoints_dict[idx] = (x_px, y_px)
 
-        return keypoints_dict
+            return keypoints_dict
+        except Exception as e:
+            print(f"Error in pose detection: {e}")
+            return {}
 
 pose_detector = PoseDetector()
 
-# Skeleton Animator to display realistic skeleton
 class SkeletonAnimator:
     def __init__(self):
         self.joints = {}
@@ -88,9 +95,7 @@ class SkeletonAnimator:
 
     def update_positions(self, keypoints):
         self.joints = keypoints
-
-        # Check if the person is sitting (example logic based on joint positions)
-        if keypoints.get(11) and keypoints.get(12):  # Left and right hips
+        if keypoints.get(11) and keypoints.get(12):
             left_hip = keypoints[11]
             right_hip = keypoints[12]
             if left_hip[1] < 0.5 and right_hip[1] < 0.5:
@@ -99,25 +104,23 @@ class SkeletonAnimator:
                 self.sitting = False
 
     def draw(self, surface):
-        surface.fill((0, 0, 0, 0))  # Clear surface
+        surface.fill((0, 0, 0, 0))
 
-        # Exaggerated funny animation when sitting or raising hands
         for start, end in self.bones:
             if start in self.joints and end in self.joints:
                 start_pos = self.joints[start]
                 end_pos = self.joints[end]
                 if self.sitting:
-                    start_pos = (start_pos[0], start_pos[1] + 20)  # Sitting pose (lower)
-                    end_pos = (end_pos[0], end_pos[1] + 20)  # Sitting pose (lower)
-                pygame.draw.line(surface, (255, 255, 255), start_pos, end_pos, 5)  # White lines for bones
+                    start_pos = (start_pos[0], start_pos[1] + 20)
+                    end_pos = (end_pos[0], end_pos[1] + 20)
+                pygame.draw.line(surface, (255, 255, 255), start_pos, end_pos, 5)
 
-        # Draw joints as circles (using pre-defined colors)
         for joint_id, joint_pos in self.joints.items():
             if joint_id in self.joint_colors:
                 color = self.joint_colors[joint_id]
-                pygame.draw.circle(surface, color, joint_pos, 10)  # Draw joint as a circle
-                if joint_id == 5:  # Left shoulder, exaggerated animation when hands raised
-                    pygame.draw.circle(surface, (255, 255, 0), (joint_pos[0], joint_pos[1] - 20), 10)  # Raise hands funny effect
+                pygame.draw.circle(surface, color, joint_pos, 10)
+                if joint_id == 5:
+                    pygame.draw.circle(surface, (255, 255, 0), (joint_pos[0], joint_pos[1] - 20), 10)
 
 def generate_frames():
     camera = cv2.VideoCapture(0)
@@ -125,35 +128,34 @@ def generate_frames():
         print("Error: Could not initialize camera.")
         return
 
-    while True:
-        success, frame = camera.read()
-        if not success:
-            continue
+    try:
+        while True:
+            success, frame = camera.read()
+            if not success:
+                continue
 
-        frame = cv2.flip(frame, 1)
-        keypoints = pose_detector.detect_pose(frame)
+            frame = cv2.flip(frame, 1)
+            keypoints = pose_detector.detect_pose(frame)
 
-        # Debugging: Print keypoints to check if pose detection is working
-        print(keypoints)
+            skeleton_animator.update_positions(keypoints)
+            skeleton_animator.draw(skeleton_surface)
 
-        skeleton_animator.update_positions(keypoints)
-        skeleton_animator.draw(skeleton_surface)
+            skeleton_image = pygame.surfarray.array3d(skeleton_surface)
+            skeleton_image = np.transpose(skeleton_image, (1, 0, 2))
+            skeleton_image = cv2.resize(skeleton_image, (frame.shape[1], frame.shape[0]))
 
-        # Convert Pygame surface to OpenCV format
-        skeleton_image = pygame.surfarray.array3d(skeleton_surface)
-        skeleton_image = np.transpose(skeleton_image, (1, 0, 2))
-        skeleton_image = cv2.resize(skeleton_image, (frame.shape[1], frame.shape[0]))
+            combined_frame = cv2.addWeighted(frame, 0.7, skeleton_image, 0.3, 0)
 
-        # Superimpose the skeleton image onto the webcam frame
-        combined_frame = cv2.addWeighted(frame, 0.7, skeleton_image, 0.3, 0)
+            ret, buffer = cv2.imencode('.jpg', combined_frame)
+            frame_bytes = buffer.tobytes()
 
-        ret, buffer = cv2.imencode('.jpg', combined_frame)
-        frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-    camera.release()
+    except Exception as e:
+        print(f"Error in generate_frames: {e}")
+    finally:
+        camera.release()
 
 skeleton_animator = SkeletonAnimator()
 
@@ -167,4 +169,10 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Check if required directories exist
+    os.makedirs('static', exist_ok=True)
+    os.makedirs('models', exist_ok=True)
+    
+    # Configure Flask for development
+    app.config['ENV'] = 'development'
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
