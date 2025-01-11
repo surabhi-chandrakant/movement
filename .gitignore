@@ -1,0 +1,8 @@
+# Ignore the entire virtual environment
+.venv/
+
+# Ignore large files in specific locations
+*.dll
+*.pyd
+*.exe
+*.lib
