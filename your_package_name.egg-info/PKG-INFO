@@ -1,0 +1,7 @@
+Metadata-Version: 2.2
+Name: your_package_name
+Version: 0.1.0
+Requires-Dist: flask
+Requires-Dist: tensorflow
+Requires-Dist: pygame
+Dynamic: requires-dist

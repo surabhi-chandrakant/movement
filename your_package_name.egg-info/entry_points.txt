@@ -1,0 +1,2 @@
+[console_scripts]
+your_script_name = your_package.module:main_function

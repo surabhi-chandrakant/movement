@@ -1,0 +1,7 @@
+Metadata-Version: 2.2
+Name: movement-app
+Version: 0.1.0
+Requires-Dist: flask
+Requires-Dist: tensorflow>=2.12.0
+Requires-Dist: pygame
+Dynamic: requires-dist
