@@ -1,12 +1,10 @@
 # Ignore virtual environment files
 .venv/* text eol=lf
-
 # Prevent Git from tracking large binary files
-*.dll binary
-*.exe binary
-*.pyd binary
-*.lib binary
-
+*.dll filter=lfs diff=lfs merge=lfs -text
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.pyd filter=lfs diff=lfs merge=lfs -text
+*.lib filter=lfs diff=lfs merge=lfs -text
 # Prevent automatic text file line-ending conversion for specific binary files
 *.pyd text eol=lf
 *.pyd binary
