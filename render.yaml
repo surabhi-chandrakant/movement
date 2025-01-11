@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: my-app
+    env: python
+    plan: free
+    build:
+      envVars:
+        - key: PYTHON_VERSION
+          value: "3.11"
+    dependencies:
+      system:
+        - libatlas-base-dev
+        - libblas-dev
+        - liblapack-dev
+        - gfortran
